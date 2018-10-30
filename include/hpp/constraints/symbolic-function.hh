@@ -54,7 +54,7 @@ namespace hpp {
             const typename Traits<Expression>::Ptr_t expr,
             std::vector <bool> mask)
         {
-          assert (mask.size() == expr->value().size());
+          assert (mask.size() == (std::size_t) expr->value().size());
           Ptr_t ptr (new SymbolicFunction (name,robot,expr,mask));
           ptr->init (ptr);
           return ptr;
@@ -81,7 +81,7 @@ namespace hpp {
           robot_->currentConfiguration (argument);
           robot_->computeForwardKinematics ();
           expr_->invalidate ();
-          expr_->computeValue ();
+          expr_->computeValue (argument);
           size_t index = 0;
           for (std::size_t i = 0; i < mask_.size (); i++) {
             if (mask_[i])
@@ -95,7 +95,7 @@ namespace hpp {
           robot_->currentConfiguration (arg);
           robot_->computeForwardKinematics ();
           expr_->invalidate ();
-          expr_->computeJacobian ();
+          expr_->computeJacobian (arg);
           size_t index = 0;
           for (std::size_t i = 0; i < mask_.size (); i++) {
             if (mask_[i])

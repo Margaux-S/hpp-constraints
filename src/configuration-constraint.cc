@@ -16,11 +16,13 @@
 
 #include <hpp/constraints/configuration-constraint.hh>
 
+#include <pinocchio/multibody/liegroup/liegroup.hpp>
+
 #include <hpp/util/debug.hh>
 #include <hpp/pinocchio/device.hh>
 #include <hpp/pinocchio/joint.hh>
 #include <hpp/pinocchio/configuration.hh>
-#include <hpp/pinocchio/liegroup-space.hh>
+#include <hpp/pinocchio/liegroup-element.hh>
 
 namespace hpp {
   namespace constraints {
@@ -29,40 +31,62 @@ namespace hpp {
         const std::string& name, const DevicePtr_t& robot,
         ConfigurationIn_t goal, std::vector <bool> mask)
     {
+      vector_t ws (vector_t::Ones(robot->numberDof ()));
+      for (std::size_t i = 0; i < mask.size (); ++i) {
+        if (!mask[i]) ws[i] = 0;
+      }
+
       ConfigurationConstraint* ptr = new ConfigurationConstraint
-        (name, robot, goal, mask);
+        (name, robot, goal, ws);
+      return ConfigurationConstraintPtr_t (ptr);
+    }
+
+    ConfigurationConstraintPtr_t ConfigurationConstraint::create (
+        const std::string& name, const DevicePtr_t& robot,
+        ConfigurationIn_t goal, const vector_t& weights)
+    {
+      ConfigurationConstraint* ptr = new ConfigurationConstraint
+        (name, robot, goal, weights);
       return ConfigurationConstraintPtr_t (ptr);
     }
 
     ConfigurationConstraint::ConfigurationConstraint (
         const std::string& name, const DevicePtr_t& robot,
-        ConfigurationIn_t goal, std::vector <bool> mask) :
+        ConfigurationIn_t goal, const vector_t& weights) :
       DifferentiableFunction (robot->configSize (), robot->numberDof (),
                               LiegroupSpace::R1 (), name),
-      robot_ (robot), goal_ (goal), diff_ (robot->numberDof())
+      robot_ (robot), weights_ (weights), diff_ (robot->numberDof())
     {
-      mask_ = EigenBoolVector_t (robot->numberDof ());
-      for (std::size_t i = 0; i < mask.size (); ++i) {
-        mask_[i] = mask[i];
-      }
-      mask_.tail (robot->numberDof () - mask.size ()).setConstant (true);
+      assert (weights.size() == robot->numberDof());
+      LiegroupSpacePtr_t s (LiegroupSpace::createCopy(robot->configSpace()));
+      s->mergeVectorSpaces();
+      goal_ = LiegroupElement (goal, s);
     }
 
     void ConfigurationConstraint::impl_compute (LiegroupElement& result,
                                                 ConfigurationIn_t argument)
       const throw ()
     {
-      // TODO: Add ability to put weights on DOF
-      hpp::pinocchio::difference (robot_, argument, goal_, diff_);
-      result.vector () [0] = 0.5 * mask_.select (diff_, 0).squaredNorm ();
+      using namespace hpp::pinocchio;
+      LiegroupConstElementRef a (argument, goal_.space());
+      diff_.noalias() = (goal_ - a).cwiseAbs2();
+      result.vector () [0] = 0.5 * weights_.dot(diff_);
     }
 
     void ConfigurationConstraint::impl_jacobian (matrixOut_t jacobian,
         ConfigurationIn_t argument) const throw ()
     {
-      hpp::pinocchio::difference (robot_, argument, goal_, diff_);
-      jacobian.leftCols (robot_->numberDof ()) =
-        mask_.select (diff_, 0).transpose ();
+      using namespace hpp::pinocchio;
+      matrix_t unused;
+
+      LiegroupConstElementRef a (argument, goal_.space());
+      diff_ = goal_ - a;
+
+      // Apply jacobian of the difference on the right.
+      goal_.space()->Jdifference<false> (argument, goal_.vector(), diff_.transpose(), unused);
+
+      jacobian.leftCols (robot_->numberDof ()).noalias() =
+        weights_.cwiseProduct(diff_).transpose ();
     }
   } // namespace constraints
 } // namespace hpp

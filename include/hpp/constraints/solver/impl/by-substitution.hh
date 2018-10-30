@@ -14,13 +14,14 @@
 // received a copy of the GNU Lesser General Public License along with
 // hpp-constraints. If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef HPP_CONSTRAINTS_IMPL_HYBRID_SOLVER_HH
-#define HPP_CONSTRAINTS_IMPL_HYBRID_SOLVER_HH
+#ifndef HPP_CONSTRAINTS_SOLVER_IMPL_BY_SUBSTITUTION_HH
+#define HPP_CONSTRAINTS_SOLVER_IMPL_BY_SUBSTITUTION_HH
 
 namespace hpp {
   namespace constraints {
+    namespace solver {
     template <typename LineSearchType>
-    inline HybridSolver::Status HybridSolver::impl_solve (
+    inline HierarchicalIterative::Status BySubstitution::impl_solve (
         vectorOut_t arg,
         LineSearchType lineSearch) const
     {
@@ -31,6 +32,7 @@ namespace hpp {
       size_type errorDecreased = 3, iter = 0;
       value_type previousSquaredNorm =
 	std::numeric_limits<value_type>::infinity();
+      static const value_type dqMinSquaredNorm = Eigen::NumTraits<value_type>::dummy_precision();
       value_type initSquaredNorm = 0;
 
       // Fill value and Jacobian
@@ -48,14 +50,20 @@ namespace hpp {
       if (squaredNorm_ > .25 * squaredErrorThreshold_
           && reducedDimension_ == 0) return INFEASIBLE;
 
+      Status status;
       while (squaredNorm_ > .25 * squaredErrorThreshold_ && errorDecreased &&
 	     iter < maxIterations_) {
 
         // Update the jacobian using the jacobian of the explicit system.
         updateJacobian(arg);
         computeSaturation(arg);
-
         computeDescentDirection ();
+        if (dq_.squaredNorm () < dqMinSquaredNorm) {
+          // TODO INFEASIBLE means that we have reached a local minima.
+          // The problem may still be feasible from a different starting point.
+          status = INFEASIBLE;
+          break;
+        }
         lineSearch (*this, arg, dq_);
         explicit_.solve(arg);
 
@@ -63,7 +71,10 @@ namespace hpp {
         computeError ();
 
 	--errorDecreased;
-	if (squaredNorm_ < previousSquaredNorm) errorDecreased = 3;
+	if (squaredNorm_ < previousSquaredNorm)
+          errorDecreased = 3;
+        else
+          status = ERROR_INCREASED;
 	previousSquaredNorm = squaredNorm_;
 	++iter;
 
@@ -77,12 +88,13 @@ namespace hpp {
       }
 
       if (squaredNorm_ > squaredErrorThreshold_) {
-        return (!errorDecreased) ? ERROR_INCREASED : MAX_ITERATION_REACHED;
+        return (iter >= maxIterations_) ? MAX_ITERATION_REACHED : status;
       }
       assert (!arg.hasNaN());
       return SUCCESS;
     }
+    } // namespace solver
   } // namespace constraints
 } // namespace hpp
 
-#endif // HPP_CONSTRAINTS_IMPL_HYBRID_SOLVER_HH
+#endif // HPP_CONSTRAINTS_SOLVER_IMPL_BY_SUBSTITUTION_HH

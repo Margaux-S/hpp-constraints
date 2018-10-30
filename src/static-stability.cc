@@ -82,7 +82,7 @@ namespace hpp {
 
       phi_.invalidate ();
 
-      phi_.computeSVD ();
+      phi_.computeSVD (argument);
 
       const Eigen::Matrix <value_type, 6, 1> G = - 1 * Gravity;
       u_.noalias() = phi_.svd().solve (G);
@@ -107,13 +107,13 @@ namespace hpp {
 
       phi_.invalidate ();
 
-      phi_.computeSVD ();
-      phi_.computeJacobian ();
-      phi_.computePseudoInverse ();
+      phi_.computeSVD (argument);
+      phi_.computeJacobian (argument);
+      phi_.computePseudoInverse (argument);
 
       const Eigen::Matrix <value_type, 6, 1> G = - 1 * Gravity;
       u_.noalias() = phi_.svd().solve (G);
-      phi_.computePseudoInverseJacobian (G);
+      phi_.computePseudoInverseJacobian (argument, G);
       uDot_.noalias () = phi_.pinvJacobian ();
 
       jacobian.block (0, 0, contacts_.size(), robot_->numberDof()).noalias ()
@@ -130,7 +130,7 @@ namespace hpp {
           // return;
         value_type lambda = 1;
 
-        computeVDot (uMinus_, S.diagonal(), uDot_, uMinusDot_, vDot_);
+        computeVDot (argument, uMinus_, S.diagonal(), uDot_, uMinusDot_, vDot_);
 
         // computeLambdaDot (u_, v_, iMin, uDot_, vDot_, lambdaDot_);
 
@@ -141,9 +141,9 @@ namespace hpp {
           += lambda * vDot_;
       }
 
-      phi_.jacobianTimes (u_,
+      phi_.jacobianTimes (argument, u_,
           jacobian.block (contacts_.size(), 0, 6, robot_->numberDof()));
-      phi_.computePseudoInverseJacobian (Gravity);
+      phi_.computePseudoInverseJacobian (argument, Gravity);
       jacobian.block (contacts_.size(), 0, 6, robot_->numberDof())
         += - phi_.value() * phi_.pinvJacobian ();
     }
@@ -170,32 +170,34 @@ namespace hpp {
 
       if (uMinus.isZero ()) return false;
 
-      v.noalias() = getV2 <MoE_t::SVD_t> (phi_.svd()) *
-        ( getV2 <MoE_t::SVD_t> (phi_.svd()).adjoint() * uMinus );
+      size_type rank = phi_.svd().rank();
+      v.noalias() = getV2 <MoE_t::SVD_t> (phi_.svd(), rank) *
+        ( getV2 <MoE_t::SVD_t> (phi_.svd(), rank).adjoint() * uMinus );
       // v.noalias() = uMinus;
       // v.noalias() -= getV1 <MoE_t::SVD_t> (phi_.svd()) *
         // ( getV1 <MoE_t::SVD_t> (phi_.svd()).adjoint() * uMinus );
       return true;
     }
 
-    void StaticStability::computeVDot (vectorIn_t uMinus,
-        vectorIn_t S, matrixIn_t uDot, matrixOut_t uMinusDot,
+    void StaticStability::computeVDot (const ConfigurationIn_t arg,
+        vectorIn_t uMinus, vectorIn_t S, matrixIn_t uDot, matrixOut_t uMinusDot,
         matrixOut_t vDot) const
     {
       using namespace hpp::pinocchio;
 
+      size_type rank = phi_.svd().rank();
       uMinusDot.noalias() = S.asDiagonal() * uDot;
       vDot.noalias() = uMinusDot;
-      vDot.noalias() -= getV1 <MoE_t::SVD_t> (phi_.svd()) *
-        ( getV1 <MoE_t::SVD_t> (phi_.svd()).adjoint() * uMinusDot );
+      vDot.noalias() -= getV1 <MoE_t::SVD_t> (phi_.svd(), rank) *
+        ( getV1 <MoE_t::SVD_t> (phi_.svd(), rank).adjoint() * uMinusDot );
 
       // TODO: preallocate this matrix
       Eigen::Matrix <value_type, 6, Eigen::Dynamic>
         JphiTimesUMinus (6,robot_->numberDof());
-      phi_.jacobianTimes (uMinus, JphiTimesUMinus);
+      phi_.jacobianTimes (arg, uMinus, JphiTimesUMinus);
       vDot.noalias() -= phi_.pinv () * JphiTimesUMinus;
 
-      phi_.computePseudoInverseJacobian (phi_.value () * uMinus);
+      phi_.computePseudoInverseJacobian (arg, phi_.value () * uMinus);
       vDot.noalias() -= phi_.pinvJacobian ();
     }
 

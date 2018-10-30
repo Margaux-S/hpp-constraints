@@ -16,7 +16,7 @@
 SET(LIBRARY_NAME ${PROJECT_NAME})
 SET (${LIBRARY_NAME}_SOURCES
   differentiable-function.cc
-  differentiable-function-stack.cc
+  differentiable-function-set.cc
   generic-transformation.cc
   relative-com.cc
   com-between-feet.cc
@@ -26,9 +26,16 @@ SET (${LIBRARY_NAME}_SOURCES
   convex-shape-contact.cc
   matrix-view.cc
   static-stability.cc
-  explicit-solver.cc
-  hybrid-solver.cc
-  iterative-solver.cc
+  explicit-constraint-set.cc
+  implicit.cc
+  explicit.cc
+  explicit/implicit-function.cc
+  explicit/relative-transformation.cc
+  explicit/relative-pose.cc
+  implicit/relative-pose.cc
+  locked-joint.cc
+  solver/by-substitution.cc
+  solver/hierarchical-iterative.cc
 )
 
 IF (${USE_QPOASES})
@@ -46,7 +53,7 @@ ADD_LIBRARY(${LIBRARY_NAME}
 PKG_CONFIG_USE_DEPENDENCY(${LIBRARY_NAME} hpp-pinocchio)
 PKG_CONFIG_USE_DEPENDENCY(${LIBRARY_NAME} hpp-statistics)
 IF (${USE_QPOASES})
-  PKG_CONFIG_USE_DEPENDENCY(${LIBRARY_NAME} qpOASES)
+  TARGET_LINK_LIBRARIES(${LIBRARY_NAME} ${QPOASES_LIBRARY})
 ENDIF (${USE_QPOASES})
 
 INSTALL(TARGETS ${LIBRARY_NAME} DESTINATION lib)
